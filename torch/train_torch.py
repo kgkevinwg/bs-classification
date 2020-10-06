@@ -12,9 +12,9 @@ from model_fc_torch import EnsembleModel
 
 mels_data_root = './data/output/figures_split/mels'
 mfcc_data_root = './data/output/figures_split/mfcc'
-OUTPUT_DIR = './checkpoints/torch'
-LEARNING_RATE = 1e-5
-EPOCHS = 50
+OUTPUT_DIR = './checkpoints'
+LEARNING_RATE = 1e-4
+EPOCHS = 100
 SPLIT=4
 
 
@@ -67,7 +67,7 @@ class Trainer():
 
     def train(self):
         self.model.train()
-
+        self.model.to(self.device)
         train_loss = Average()
         train_acc = Accuracy()
 
@@ -100,20 +100,27 @@ class Trainer():
 
     def evaluate(self):
         self.model.eval()
-
+        self.model.to(self.device)
         valid_loss = Average()
         valid_acc = Accuracy()
 
         with torch.no_grad():
             valid_loader = tqdm(self.valid_loader, desc='Validate', ncols=0)
-            for x, y in valid_loader:
-                x = x.to(self.device)
-                y = y.to(self.device)
+            for mels, mfcc in valid_loader:
+                x1 = mels[0]
+                x2 = mfcc[0]
+                y1 = mels[1]
+                y2 = mfcc[1]
+                if not torch.all(torch.eq(y1, y2)).numpy():
+                    print("y1 y2 not valid")
+                    exit()
+                x1 = x1.to(self.device)
+                x2 = x2.to(self.device)
+                y = y1.to(self.device)
 
-                output = self.model(x)
+                output = self.model(x1, x2)
                 loss = F.cross_entropy(output, y)
-
-                valid_loss.update(loss.item(), number=x.size(0))
+                valid_loss.update(loss.item(), number=x1.size(0))
                 valid_acc.update(output, y)
 
                 valid_loader.set_postfix_str(f'valid loss: {valid_loss}, valid acc: {valid_acc}.')
