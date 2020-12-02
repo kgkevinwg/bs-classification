@@ -12,21 +12,28 @@ from model_fc_torch import EnsembleModel
 
 mels_data_root = './data/output/figures_split/mels'
 mfcc_data_root = './data/output/figures_split/mfcc'
-OUTPUT_DIR = './checkpoints'
+OUTPUT_DIR = './checkpoints/figures_weight_4_shuffle_batch5'
+TRAIN_ACC_HISTORY = 'eff4_split4_batch5_train_acc_history.txt'
+TRAIN_LOSS_HISTORY = 'eff4_split4_batch5_train_loss_history.txt'
+VAL_ACC_HISTORY = 'eff4_split4_batch5_val_acc_history.txt'
+VAL_LOSS_HISTORY = 'eff4_split4__batch5_val_loss_history.txt'
 LEARNING_RATE = 1e-4
 EPOCHS = 100
 SPLIT=4
 
 
 class MultiImageInput(data.Dataset):
-    def __init__(self, *datasets):
-        self.datasets = datasets
+    def __init__(self, datasets_mels, datasets_mfcc):
+        self.datasets_mels = datasets_mels
+        self.datasets_mfcc = datasets_mfcc
 
-    def __getitem__(self, item):
-        return tuple(d[item] for d in self.datasets)
+    def __getitem__(self, index):
+        x1 = self.datasets_mels[index]
+        x2 = self.datasets_mfcc[index]
+        return x1, x2
 
     def __len__(self):
-        return min(len(d) for d in self.datasets)
+        return len(self.datasets_mels)
 
 
 
@@ -47,6 +54,10 @@ class Trainer():
 
         self.epoch = 1
         self.best_acc = 0
+        
+        n_samples = [288, 1424, 2032, 2080, 2048, 1664, 864]
+        normedWeights = [1 - (x / sum(n_samples)) for x in n_samples]
+        self.normedWeights = torch.FloatTensor(normedWeights).to(device)
 
     def fit(self):
         epochs = trange(self.epoch, self.num_epochs + 1, desc='Epoch', ncols=0)
@@ -55,8 +66,16 @@ class Trainer():
 
             train_loss, train_acc = self.train()
             valid_loss, valid_acc = self.evaluate()
+            with open(VAL_ACC_HISTORY, 'a') as fva:
+                fva.write(str(valid_acc.value)+"\n")
+            with open(VAL_LOSS_HISTORY, 'a') as fvl:
+                fvl.write(str(valid_loss.value)+"\n")
+            with open(TRAIN_ACC_HISTORY, 'a') as fta:
+                fta.write(str(train_acc.value)+"\n")
+            with open(TRAIN_LOSS_HISTORY, 'a') as ftl:
+                ftl.write(str(train_loss.value)+"\n")
 
-            self.save_checkpoint(os.path.join(self.output_dir, 'eff4b_split{}_epoch{}_validloss{}_checkpoint.pth'.format(SPLIT, self.epoch, valid_loss)))
+            self.save_checkpoint(os.path.join(self.output_dir, 'eff4b_batch5_split{}_epoch{}_validloss{}_checkpoint.pth'.format(SPLIT, self.epoch, valid_loss.value)))
             if valid_acc > self.best_acc:
                 self.best_acc = valid_acc.value
                 self.save_checkpoint(os.path.join(self.output_dir, 'best.pth'))
@@ -85,7 +104,7 @@ class Trainer():
             y = y1.to(self.device)
 
             output = self.model(x1, x2)
-            loss = F.cross_entropy(output, y)
+            loss = F.cross_entropy(output, y, weight=self.normedWeights)
 
             self.optimizer.zero_grad()
             loss.backward()
@@ -119,7 +138,7 @@ class Trainer():
                 y = y1.to(self.device)
 
                 output = self.model(x1, x2)
-                loss = F.cross_entropy(output, y)
+                loss = F.cross_entropy(output, y, weight=self.normedWeights)
                 valid_loss.update(loss.item(), number=x1.size(0))
                 valid_acc.update(output, y)
 
@@ -165,11 +184,39 @@ def load_dataset(batch_size=4):
     train_loader = data.DataLoader(
         MultiImageInput(datasets.ImageFolder(os.path.join(mels_data_root, "train"), transform=transform),
                         datasets.ImageFolder(os.path.join(mfcc_data_root, "train"), transform=transform)),
-        shuffle=False, batch_size=batch_size)
+        shuffle=True, batch_size=batch_size)
+    train_mels_imgs = datasets.ImageFolder(os.path.join(mels_data_root, "train"), transform=transform).imgs
+    train_mfcc_imgs = datasets.ImageFolder(os.path.join(mfcc_data_root, "train"), transform=transform).imgs
+    with open("train_mels_imgs.txt", "a") as f:
+        for line in train_mels_imgs:
+            line = list(line)
+            line[1] = str(line[1])
+            f.write("-".join(line))
+            f.write("\n")
+    with open("train_mfcc_imgs.txt", "a") as f:
+        for line in train_mfcc_imgs:
+            line = list(line)
+            line[1] = str(line[1])
+            f.write("-".join(line))
+            f.write("\n")
     val_loader = data.DataLoader(
         MultiImageInput(datasets.ImageFolder(os.path.join(mels_data_root, "val"), transform=transform),
                         datasets.ImageFolder(os.path.join(mfcc_data_root, "val"), transform=transform)),
-        shuffle=False, batch_size=batch_size)
+        shuffle=True, batch_size=batch_size)
+    val_mels_imgs = datasets.ImageFolder(os.path.join(mels_data_root, "val"), transform=transform).imgs
+    val_mfcc_imgs = datasets.ImageFolder(os.path.join(mfcc_data_root, "val"), transform=transform).imgs
+    with open("val_mels_imgs.txt", "a") as f:
+        for line in val_mels_imgs:
+            line = list(line)
+            line[1] = str(line[1])
+            f.write("-".join(line))
+            f.write("\n")
+    with open("val_mfcc_imgs.txt", "a") as f:
+        for line in val_mfcc_imgs:
+            line = list(line)
+            line[1] = str(line[1])
+            f.write("-".join(line))
+            f.write("\n")
     test_loader = data.DataLoader(
         MultiImageInput(datasets.ImageFolder(os.path.join(mels_data_root, "test"), transform=transform),
                         datasets.ImageFolder(os.path.join(mfcc_data_root, "test"), transform=transform)),
@@ -179,7 +226,7 @@ def load_dataset(batch_size=4):
 
 def main():
     train_loader, val_loader, test_loader = load_dataset(batch_size=5)
-    ensembleModel = EnsembleModel(split=SPLIT, num_classes=7)
+    ensembleModel = EnsembleModel(split=SPLIT, num_classes=7, freeze_A= False, pretrained=True)
     optimizer_SGD = torch.optim.SGD(ensembleModel.parameters(), lr=LEARNING_RATE)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print("Device: ", device)

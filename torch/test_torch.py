@@ -9,8 +9,8 @@ import torch.nn.functional as F
 import os
 from tqdm import tqdm
 
-mels_data_root = './data/output/figures_split/mels'
-mfcc_data_root = './data/output/figures_split/mfcc'
+mels_data_root = './data/output/figures_split_old/mels'
+mfcc_data_root = './data/output/figures_split_old/mfcc'
 CHECKPOINT_DIR = './checkpoints/best.pth'
 SPLIT=4
 
@@ -42,7 +42,7 @@ def load_dataset(batch_size=4):
     return test_loader
 
 def generate_labels(loader):
-    loader = tqdm(loader, desc='Test', ncols=0)
+    loader = tqdm(loader, desc='Generate Labels', ncols=0)
     label_list = list()
     for mels, mfcc in loader:
         y1 = mels[1]

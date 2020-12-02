@@ -200,6 +200,7 @@ class EfficientNet(nn.Module):
 
         if mode == "end" or mode == "":
             self.last_channels = _round_filters(1280, width_mult)
+            print("[INFO] Last channels: ", self.last_channels)
             features += [ConvBNReLU(in_channels, self.last_channels, 1)]
 
         self.features = nn.Sequential(*features)
@@ -235,7 +236,7 @@ class EfficientNet(nn.Module):
         return x
 
 
-def _efficientnet(arch, pretrained, progress, mode="", split=0, num_classes = 7, **kwargs):
+def _efficientnet(arch, pretrained, progress, mode="", split=0, num_classes = 7, freeze_A = False, **kwargs):
     width_mult, depth_mult, _, dropout_rate = params[arch]
     # model = EfficientNet(width_mult, depth_mult, dropout_rate)
     # print(model)
@@ -245,7 +246,7 @@ def _efficientnet(arch, pretrained, progress, mode="", split=0, num_classes = 7,
         model_end = EfficientNet(width_mult, depth_mult, dropout_rate, mode="end", split=split, include_top=True, num_classes=7)
 
         if pretrained:
-            # print('pretrained')
+            print('[INFO] pretrained network used')
             model_state = model_start_A.state_dict().keys()
             # print("model_start_state state: ", model_state)
 
@@ -268,7 +269,12 @@ def _efficientnet(arch, pretrained, progress, mode="", split=0, num_classes = 7,
             model_start_A.load_state_dict(start_state_dict)
             model_start_B.load_state_dict(start_state_dict)
             # print("start_state_dict: ", start_state_dict.keys())
-
+            if freeze_A:
+                print("[INFO] FREEZING INPUT BLOCk")
+                for param in model_start_A.parameters():
+                    param.requires_grad = False
+                for param in model_start_B.parameters():
+                    param.requires_grad = False
 
             model_end_state = model_end.state_dict().keys()
             # print("model_end_state: ", model_end_state)
@@ -289,11 +295,24 @@ def _efficientnet(arch, pretrained, progress, mode="", split=0, num_classes = 7,
                     print(end_state_dict_corrected[key])
 
             model_end.load_state_dict(end_state_dict_corrected, strict=False)
+        else:
+            print('[INFO] scratch network used')
 
         return model_start_A, model_start_B, model_end
+            
     else:
-        model = EfficientNet(width_mult, depth_mult, dropout_rate, **kwargs)
+        print("[INFO] Single input eff used")
+        width_mult, depth_mult, _, dropout_rate = params[arch]
 
+        model = EfficientNet(width_mult, depth_mult, dropout_rate, **kwargs)
+        if pretrained:
+            state_dict = load_state_dict_from_url(model_urls[arch], progress=progress)
+            if num_classes != 1000:
+                del state_dict['classifier.1.weight']
+                del state_dict['classifier.1.bias']
+
+        model.load_state_dict(state_dict, strict=False)
+        return model
 
 
 
@@ -320,12 +339,12 @@ def efficientnet_b3(pretrained=False, progress=True, **kwargs):
 
 
 @mlconfig.register
-def efficientnet_b4(pretrained=False, progress=True, **kwargs):
-    return _efficientnet('efficientnet_b4', pretrained, progress, **kwargs)
+def efficientnet_b4(pretrained=False, progress=True, num_classes=7, freeze_A= False, **kwargs):
+    return _efficientnet('efficientnet_b4', pretrained, progress, num_classes=num_classes, freeze_A = freeze_A, **kwargs)
 
 @mlconfig.register
-def efficientnet_b4_split(pretrained=True, progress=True, split=4, num_classes=7, **kwargs):
-    model_start_A, model_start_B, model_end = _efficientnet("efficientnet_b4", pretrained, progress, mode="start", split=split, num_classes=num_classes, **kwargs)
+def efficientnet_b4_split(pretrained=True, progress=True, split=4, num_classes=7, freeze_A= False, **kwargs):
+    model_start_A, model_start_B, model_end = _efficientnet("efficientnet_b4", pretrained, progress, mode="start", split=split, num_classes=num_classes, freeze_A = freeze_A, **kwargs)
     # model_B = _efficientnet("efficientnet_b4", pretrained, progress, mode="end", split=split, **kwargs)
     return model_start_A, model_start_B, model_end
 

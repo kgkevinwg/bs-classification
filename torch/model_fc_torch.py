@@ -3,9 +3,9 @@ import torch
 from torch import nn
 
 class EnsembleModel(nn.Module):
-    def __init__(self,split, num_classes=7):
+    def __init__(self,split, num_classes=7, freeze_A=False, pretrained=True):
         super(EnsembleModel, self).__init__()
-        model_start_A, model_start_B, model_end = efficientnet.efficientnet_b4_split(split=split, num_classes=num_classes)
+        model_start_A, model_start_B, model_end = efficientnet.efficientnet_b4_split(split=split, num_classes=num_classes, freeze_A = freeze_A, pretrained= pretrained)
         self.model_start_A = model_start_A
         self.model_start_B = model_start_B
         self.model_end = model_end
